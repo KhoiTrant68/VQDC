@@ -1,4 +1,4 @@
-from modules.dynamic.encoder_dual import DualGrainEncoder
+from modules.dynamic.encoder_dual_new import DualGrainEncoder
 import unittest
 import torch
 

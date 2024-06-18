@@ -17,6 +17,30 @@ from modules.dynamic.dynamic_utils import instantiate_from_config
 sys.path.append(os.getcwd())
 
 
+class MiddleBlock(nn.Module):
+    def __init__(self, block_in, dropout, temb_ch):
+        super(MiddleBlock, self).__init__()
+        self.block_1 = ResnetBlock(
+            in_channels=block_in,
+            out_channels=block_in,
+            temb_channels=temb_ch,
+            dropout=dropout,
+        )
+        self.attn_1 = AttnBlock(block_in)
+        self.block_2 = ResnetBlock(
+            in_channels=block_in,
+            out_channels=block_in,
+            temb_channels=temb_ch,
+            dropout=dropout,
+        )
+
+    def forward(self, x):
+        x = self.block_1(x, None)
+        x = self.attn_1(x)
+        x = self.block_2(x, None)
+        return x
+
+
 class DualGrainEncoder(nn.Module):
     def __init__(
         self,
@@ -41,25 +65,26 @@ class DualGrainEncoder(nn.Module):
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
         self.in_channels = in_channels
+        self.update_router = update_router
 
-        # Downsampling
-        self.conv_in = nn.Conv2d(
-            in_channels, self.ch, kernel_size=3, stride=1, padding=1
-        )
+        # Initial convolution
+        self.conv_in = nn.Conv2d(in_channels, ch, kernel_size=3, stride=1, padding=1)
+
+        # Downsampling layers
         self.down, block_in = self._make_downsampling_layers(
-            ch, ch_mult, num_res_blocks, attn_resolutions, dropout, resamp_with_conv
+            ch, ch_mult, attn_resolutions, dropout, resamp_with_conv
         )
 
-        # Middle for coarse grain
-        self.mid_coarse = self._make_middle_block(block_in, dropout)
+        # Middle blocks
+        self.mid_coarse = MiddleBlock(block_in, dropout, self.temb_ch)
         self.norm_out_coarse = Normalize(block_in)
         self.conv_out_coarse = nn.Conv2d(
             block_in, z_channels, kernel_size=3, stride=1, padding=1
         )
 
-        # Middle for fine grain
         block_in_finegrain = block_in // (ch_mult[-1] // ch_mult[-2])
-        self.mid_fine = self._make_middle_block(block_in_finegrain, dropout)
+        
+        self.mid_fine = MiddleBlock(block_in_finegrain, dropout, self.temb_ch)
         self.norm_out_fine = Normalize(block_in_finegrain)
         self.conv_out_fine = nn.Conv2d(
             block_in_finegrain, z_channels, kernel_size=3, stride=1, padding=1
@@ -67,10 +92,9 @@ class DualGrainEncoder(nn.Module):
 
         # Router
         self.router = instantiate_from_config(router_config)
-        self.update_router = update_router
 
     def _make_downsampling_layers(
-        self, ch, ch_mult, num_res_blocks, attn_resolutions, dropout, resamp_with_conv
+        self, ch, ch_mult, attn_resolutions, dropout, resamp_with_conv
     ):
         layers = nn.ModuleList()
         curr_res = self.resolution
@@ -102,23 +126,6 @@ class DualGrainEncoder(nn.Module):
             layers.append(down)
         return layers, block_in
 
-    def _make_middle_block(self, block_in, dropout):
-        block = nn.Module()
-        block.block_1 = ResnetBlock(
-            in_channels=block_in,
-            out_channels=block_in,
-            temb_channels=self.temb_ch,
-            dropout=dropout,
-        )
-        block.attn_1 = AttnBlock(block_in)
-        block.block_2 = ResnetBlock(
-            in_channels=block_in,
-            out_channels=block_in,
-            temb_channels=self.temb_ch,
-            dropout=dropout,
-        )
-        return block
-
     def forward(self, x, x_entropy):
         assert (
             x.shape[2] == x.shape[3] == self.resolution
@@ -138,24 +145,15 @@ class DualGrainEncoder(nn.Module):
             if i_level == self.num_resolutions - 2:
                 h_fine = h
 
-        h_coarse = hs[-1]
-
         # Middle for h_coarse
-        h_coarse = self.mid_coarse.block_1(h_coarse, None)
-        h_coarse = self.mid_coarse.attn_1(h_coarse)
-        h_coarse = self.mid_coarse.block_2(h_coarse, None)
-
-        # End for h_coarse
+        h_coarse = hs[-1]
+        h_coarse = self.mid_coarse(h_coarse)
         h_coarse = self.norm_out_coarse(h_coarse)
         h_coarse = nonlinearity(h_coarse)
         h_coarse = self.conv_out_coarse(h_coarse)
 
         # Middle for h_fine
-        h_fine = self.mid_fine.block_1(h_fine, None)
-        h_fine = self.mid_fine.attn_1(h_fine)
-        h_fine = self.mid_fine.block_2(h_fine, None)
-
-        # End for h_fine
+        h_fine = self.mid_fine(h_fine)
         h_fine = self.norm_out_fine(h_fine)
         h_fine = nonlinearity(h_fine)
         h_fine = self.conv_out_fine(h_fine)
