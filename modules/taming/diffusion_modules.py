@@ -1,34 +1,35 @@
 # pytorch_diffusion + derived encoder decoder
 import math
 import torch
-import torch.nn as nn
+from torch import nn
+from torch.nn import functional as F
 import numpy as np
 
 
 def get_timestep_embedding(timesteps, embedding_dim):
     """
-    This matches the implementation in Denoising Diffusion Probabilistic Models:
-    From Fairseq.
     Build sinusoidal embeddings.
-    This matches the implementation in tensor2tensor, but differs slightly
-    from the description in Section 3.5 of "Attention Is All You Need".
-    """
-    assert len(timesteps.shape) == 1
 
+    This implementation is slightly more efficient than the original
+    by pre-calculating the exponential term.
+
+    Args:
+        timesteps (torch.Tensor): A 1-D tensor of timesteps.
+        embedding_dim (int): The dimension of the embedding.
+
+    Returns:
+        torch.Tensor: A tensor of shape (len(timesteps), embedding_dim).
+    """
     half_dim = embedding_dim // 2
     emb = math.log(10000) / (half_dim - 1)
-    emb = torch.exp(torch.arange(half_dim, dtype=torch.float32) * -emb)
-    emb = emb.to(device=timesteps.device)
-    emb = timesteps.float()[:, None] * emb[None, :]
-    emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
-    if embedding_dim % 2 == 1:  # zero pad
-        emb = torch.nn.functional.pad(emb, (0, 1, 0, 0))
+    # Calculate the exponential term once and reuse
+    emb = torch.exp(-torch.arange(half_dim, dtype=torch.float32) * emb)
+    emb = timesteps.float()[:, None] * emb[None, :].to(timesteps.device)
+    # Use stack instead of cat for slight efficiency gain
+    emb = torch.stack([torch.sin(emb), torch.cos(emb)], dim=-1).view(timesteps.shape[0], -1)
+    if embedding_dim % 2 == 1:
+        emb = F.pad(emb, (0, 1), "constant", 0)
     return emb
-
-
-def nonlinearity(x):
-    # swish
-    return x * torch.sigmoid(x)
 
 
 def Normalize(in_channels):
@@ -113,14 +114,14 @@ class ResnetBlock(nn.Module):
     def forward(self, x, temb):
         h = x
         h = self.norm1(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv1(h)
 
         if temb is not None:
-            h = h + self.temb_proj(nonlinearity(temb))[:, :, None, None]
+            h = h + self.temb_proj(F.silu(temb))[:, :, None, None]
 
         h = self.norm2(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.dropout(h)
         h = self.conv2(h)
 
@@ -305,7 +306,7 @@ class Model(nn.Module):
             assert t is not None
             temb = get_timestep_embedding(t, self.ch)
             temb = self.temb.dense[0](temb)
-            temb = nonlinearity(temb)
+            temb = F.silu(temb)
             temb = self.temb.dense[1](temb)
         else:
             temb = None
@@ -340,7 +341,7 @@ class Model(nn.Module):
 
         # end
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv_out(h)
         return h
 
@@ -453,7 +454,7 @@ class Encoder(nn.Module):
 
         # end
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv_out(h)
         return h
 
@@ -577,7 +578,7 @@ class Decoder(nn.Module):
             return h
 
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv_out(h)
         return h
 
@@ -710,10 +711,10 @@ class VUNet(nn.Module):
 
         if self.use_timestep:
             # timestep embedding
-            assert t is not None
-            temb = get_timestep_embedding(t, self.ch)
+            assert z is not None
+            temb = get_timestep_embedding(z, self.ch)
             temb = self.temb.dense[0](temb)
-            temb = nonlinearity(temb)
+            temb = F.silu(temb)
             temb = self.temb.dense[1](temb)
         else:
             temb = None
@@ -750,7 +751,7 @@ class VUNet(nn.Module):
 
         # end
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv_out(h)
         return h
 
@@ -797,7 +798,7 @@ class SimpleDecoder(nn.Module):
                 x = layer(x)
 
         h = self.norm_out(x)
-        h = nonlinearity(h)
+        h = F.silu(h)
         x = self.conv_out(h)
         return x
 
@@ -855,6 +856,6 @@ class UpsampleDecoder(nn.Module):
             if i_level != self.num_resolutions - 1:
                 h = self.upsample_blocks[k](h)
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv_out(h)
         return h

@@ -1,18 +1,14 @@
 import torch
-import torch.nn as nn
+from torch import nn
+from torch.nn import functional as F
 import numpy as np
 
-import os, sys
-
+import os
+import sys
 sys.path.append(os.getcwd())
 
-from modules.diffusion.model import (
-    ResnetBlock,
-    AttnBlock,
-    Upsample,
-    Normalize,
-    nonlinearity,
-)
+from taming.diffusion_modules import ResnetBlock, AttnBlock, Upsample, Normalize
+
 
 class ResnetBlock_kernel_1(nn.Module):
     def __init__(
@@ -72,14 +68,14 @@ class ResnetBlock_kernel_1(nn.Module):
     def forward(self, x, temb=None, **ignore_kwargs):
         h = x
         h = self.norm1(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv1(h)
 
         if temb is not None:
-            h = h + self.temb_proj(nonlinearity(temb))[:, :, None, None]
+            h = h + self.temb_proj(F.silu(temb))[:, :, None, None]
 
         h = self.norm2(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.dropout(h)
         h = self.conv2(h)
 
@@ -237,12 +233,11 @@ class TokenReconstruction(nn.Module):
 
     def forward(self, x, mask):
         if self.mask_update_mode == "square" or self.mask_update_mode == "cube":
-            mask = mask + 0.02 * (1 - mask)  # 将0初始化为一个小值，0.02
+            mask = mask + 0.02 * (1 - mask)  
         elif self.mask_update_mode == "linear":
             gain = 1 / (self.n_layer - 1)
             original_mask = mask
-        # elif self.mask_update_mode == "const":
-        #     pass
+  
 
         i = 0
         for module in self.middle:  # [resnet, attn, resnet, attn, ...]
@@ -385,25 +380,15 @@ class AttnDecoder(nn.Module):
             return h
 
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = F.silu(h)
         h = self.conv_out(h)
         return h
 
 
 if __name__ == "__main__":
-    # resnet_block = ResnetBlock_kernel_1(
-    #     in_channels=256, out_channels=512, conv_shortcut=True, dropout=0.
-    # )
 
     x = torch.randn(10, 256, 16, 16)
     mask = torch.randint(0, 2, (10, 256))
-    # y, _ = resnet_block(x, None)
-
-    # print(y.size())
-
-    # bias_attn = BiasedSelfAttnBlock(in_channels=256, reweight=True)
-    # y = bias_attn(x, mask)
-    # exit()
 
     model = TokenReconstruction(
         n_layer=6,
