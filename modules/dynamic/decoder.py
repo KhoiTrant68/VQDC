@@ -1,19 +1,23 @@
+import os
+import sys
+
+sys.path.append(os.getcwd())
+
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import functional as F
 import numpy as np
 from einops import rearrange
 
-import os, sys
-sys.path.append(os.getcwd())
 from taming.diffusion_modules import ResnetBlock, AttnBlock, Upsample, Normalize
 from fourier_embedding import FourierPositionEmbedding
+
 
 class PositionEmbedding2DLearned(nn.Module):
     """
     Learned 2D position embedding module.
 
-    This module learns separate embeddings for row and column positions 
+    This module learns separate embeddings for row and column positions
     and combines them to create a 2D position embedding.
 
     Args:
@@ -21,6 +25,7 @@ class PositionEmbedding2DLearned(nn.Module):
         feats_dim (int): Dimensionality of the embedding features.
         n_col (int, optional): Number of columns (defaults to n_row).
     """
+
     def __init__(self, n_row, feats_dim, n_col=None):
         super().__init__()
         n_col = n_col if n_col is not None else n_row
@@ -51,20 +56,21 @@ class PositionEmbedding2DLearned(nn.Module):
         x_emb = self.col_embed(i).unsqueeze(0).repeat(h, 1, 1)
         y_emb = self.row_embed(j).unsqueeze(1).repeat(1, w, 1)
         pos = (x_emb + y_emb).permute(2, 0, 1).unsqueeze(0).repeat(x.shape[0], 1, 1, 1)
-        
+
         # Handle relative position embedding (5D input)
-        if x.dim() == 5:  
+        if x.dim() == 5:
             pos = pos.unsqueeze(-3)
 
         x = x + pos
         return x
 
+
 class Decoder(nn.Module):
     """
     Decoder module for a generative model.
 
-    This decoder upsamples a latent representation through a series of 
-    residual blocks, attention blocks, and upsampling layers. It supports 
+    This decoder upsamples a latent representation through a series of
+    residual blocks, attention blocks, and upsampling layers. It supports
     different position embedding techniques for enhanced spatial awareness.
 
     Args:
@@ -80,14 +86,26 @@ class Decoder(nn.Module):
         give_pre_end (bool, optional): Return output before final layers (default: False).
         latent_size (int, optional): Size of the latent representation (default: 32).
         window_size (int, optional): Window size for relative position embedding (default: 2).
-        position_type (str, optional): Type of position embedding 
+        position_type (str, optional): Type of position embedding
                                        ("relative", "learned", "fourier", "fourier+learned", default: "relative").
     """
-    def __init__(self, 
-                 ch, in_ch, out_ch, ch_mult, num_res_blocks, resolution,
-                 attn_resolutions, dropout = 0.0, resamp_with_conv = True, give_pre_end = False,
-                 latent_size = 32, window_size = 2, position_type = "relative"
-                 ):
+
+    def __init__(
+        self,
+        ch,
+        in_ch,
+        out_ch,
+        ch_mult,
+        num_res_blocks,
+        resolution,
+        attn_resolutions,
+        dropout=0.0,
+        resamp_with_conv=True,
+        give_pre_end=False,
+        latent_size=32,
+        window_size=2,
+        position_type="relative",
+    ):
         super().__init__()
         self.num_resolutions = len(ch_mult)
         self.num_res_blocks = num_res_blocks
@@ -99,18 +117,34 @@ class Decoder(nn.Module):
 
         # Calculate input block channels and initial resolution
         block_in = ch * ch_mult[self.num_resolutions - 1]
-        curr_res = resolution // 2**(self.num_resolutions - 1)
+        curr_res = resolution // 2 ** (self.num_resolutions - 1)
         self.z_shape = (1, in_ch, curr_res, curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
+        print(
+            "Working with z of shape {} = {} dimensions.".format(
+                self.z_shape, np.prod(self.z_shape)
+            )
+        )
 
         # Input convolution layer
-        self.conv_in = torch.nn.Conv2d(in_ch, block_in, kernel_size=3, stride=1, padding=1)
+        self.conv_in = torch.nn.Conv2d(
+            in_ch, block_in, kernel_size=3, stride=1, padding=1
+        )
 
         # Middle layers (residual blocks and attention)
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout)
+        self.mid.block_1 = ResnetBlock(
+            in_channels=block_in,
+            out_channels=block_in,
+            temb_channels=self.temb_ch,
+            dropout=dropout,
+        )
         self.mid.attn_1 = AttnBlock(block_in)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout)
+        self.mid.block_2 = ResnetBlock(
+            in_channels=block_in,
+            out_channels=block_in,
+            temb_channels=self.temb_ch,
+            dropout=dropout,
+        )
 
         # Upsampling layers
         self.up = nn.ModuleList()
@@ -119,7 +153,14 @@ class Decoder(nn.Module):
             attn = nn.ModuleList()
             block_out = ch * ch_mult[i_level]
             for i_block in range(self.num_res_blocks + 1):
-                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, temb_channels=self.temb_ch, dropout=dropout))
+                block.append(
+                    ResnetBlock(
+                        in_channels=block_in,
+                        out_channels=block_out,
+                        temb_channels=self.temb_ch,
+                        dropout=dropout,
+                    )
+                )
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(AttnBlock(block_in))
@@ -133,23 +174,37 @@ class Decoder(nn.Module):
 
         # Output layers (normalization and convolution)
         self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(block_in, out_ch, kernel_size=3, stride=1, padding=1)
+        self.conv_out = torch.nn.Conv2d(
+            block_in, out_ch, kernel_size=3, stride=1, padding=1
+        )
 
         # Position embedding setup
         self.position_type = position_type
         if self.position_type == "learned":
-            self.position_bias = PositionEmbedding2DLearned(n_row=latent_size, feats_dim=in_ch)
+            self.position_bias = PositionEmbedding2DLearned(
+                n_row=latent_size, feats_dim=in_ch
+            )
         elif self.position_type == "learned-relative":
-            self.position_bias = PositionEmbedding2DLearned(n_row=window_size, feats_dim=in_ch)
+            self.position_bias = PositionEmbedding2DLearned(
+                n_row=window_size, feats_dim=in_ch
+            )
             self.window_size = window_size
             self.window_num = latent_size // window_size
         elif self.position_type == "fourier":
-            self.position_bias = FourierPositionEmbedding(coord_size=latent_size, hidden_size=in_ch)
+            self.position_bias = FourierPositionEmbedding(
+                coord_size=latent_size, hidden_size=in_ch
+            )
         elif self.position_type == "fourier+learned":
-            self.position_bias_fourier = FourierPositionEmbedding(coord_size=latent_size, hidden_size=in_ch)
-            self.position_bias_learned = PositionEmbedding2DLearned(n_row=latent_size, feats_dim=in_ch)
+            self.position_bias_fourier = FourierPositionEmbedding(
+                coord_size=latent_size, hidden_size=in_ch
+            )
+            self.position_bias_learned = PositionEmbedding2DLearned(
+                n_row=latent_size, feats_dim=in_ch
+            )
         else:
-            raise NotImplementedError(f"Position embedding type '{self.position_type}' not implemented.")
+            raise NotImplementedError(
+                f"Position embedding type '{self.position_type}' not implemented."
+            )
 
     def forward(self, h, grain_indices):
         """
@@ -166,9 +221,21 @@ class Decoder(nn.Module):
         if self.position_type == "learned":
             h = self.position_bias(h)
         elif self.position_type == "learned-relative":
-            h = rearrange(h, "B C (n1 nH) (n2 nW) -> B C (n1 n2) nH nW", n1=self.window_num, nH=self.window_size, n2=self.window_num, nW=self.window_size)
+            h = rearrange(
+                h,
+                "B C (n1 nH) (n2 nW) -> B C (n1 n2) nH nW",
+                n1=self.window_num,
+                nH=self.window_size,
+                n2=self.window_num,
+                nW=self.window_size,
+            )
             h = self.position_bias(h)
-            h = rearrange(h, "B C (n1 n2) nH nW -> B C (n1 nH) (n2 nW)", n1=self.window_num, nH=self.window_size)
+            h = rearrange(
+                h,
+                "B C (n1 n2) nH nW -> B C (n1 nH) (n2 nW)",
+                n1=self.window_num,
+                nH=self.window_size,
+            )
         elif self.position_type == "fourier":
             h = self.position_bias(h)
         elif self.position_type == "fourier+learned":
@@ -176,7 +243,7 @@ class Decoder(nn.Module):
             h = self.position_bias_learned(h)
 
         # Initial convolution
-        temb = None  # Placeholder for time embedding 
+        temb = None  # Placeholder for time embedding
         h = self.conv_in(h)
 
         # Middle layers

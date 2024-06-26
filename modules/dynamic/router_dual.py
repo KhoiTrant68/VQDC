@@ -1,7 +1,9 @@
-import torch
-import torch.nn as nn
-import numpy as np
 import json
+import numpy as np
+
+import torch
+from torch import nn
+
 
 class DualGrainFeatureRouter(nn.Module):
     """
@@ -14,6 +16,7 @@ class DualGrainFeatureRouter(nn.Module):
         gate_type (str, optional): Type of gate function.
             Defaults to "1layer-fc". Options: "1layer-fc", "2layer-fc-SiLu".
     """
+
     def __init__(self, num_channels, normalization_type="none", gate_type="1layer-fc"):
         super().__init__()
         self.gate_pool = nn.AvgPool2d(2, 2)
@@ -65,7 +68,7 @@ class DualGrainFeatureRouter(nn.Module):
         avg_h_fine = self.gate_pool(h_fine)
         h_logistic = torch.cat([h_coarse, avg_h_fine], dim=1).permute(0, 2, 3, 1)
 
-        gate = self.gate(h_logistic) 
+        gate = self.gate(h_logistic)
         return gate
 
 
@@ -73,6 +76,7 @@ class DualGrainEntropyRouter(nn.Module):
     """
     Base class for entropy-based dual-grain routers.
     """
+
     def __init__(self, json_path):
         super().__init__()
         with open(json_path, "r", encoding="utf-8") as f:
@@ -103,6 +107,7 @@ class DualGrainFixedEntropyRouter(DualGrainEntropyRouter):
         json_path (str): Path to JSON file with entropy thresholds.
         fine_grain_ratio (float): Ratio of fine-grained tokens.
     """
+
     def __init__(self, json_path, fine_grain_ratio):
         super().__init__(json_path)
         self.fine_grain_threshold = self.entropy_thresholds[
@@ -134,9 +139,10 @@ class DualGrainDynamicEntropyRouter(DualGrainEntropyRouter):
         fine_grain_ratio_min (float): Minimum ratio of fine-grained tokens.
         fine_grain_ratio_max (float): Maximum ratio of fine-grained tokens.
     """
+
     def __init__(self, json_path, fine_grain_ratio_min=0.01, fine_grain_ratio_max=0.99):
         super().__init__(json_path)
-        self.fine_grain_ratio_min = int(fine_grain_ratio_min * 100) 
+        self.fine_grain_ratio_min = int(fine_grain_ratio_min * 100)
         self.fine_grain_ratio_max = int(fine_grain_ratio_max * 100) + 1
 
     def forward(self, h_fine=None, h_coarse=None, entropy=None):
@@ -161,6 +167,6 @@ class DualGrainDynamicEntropyRouter(DualGrainEntropyRouter):
 
 if __name__ == "__main__":
     model = DualGrainFixedEntropyRouter(
-        json_path="D:\AwesomeCV\VQDC_testing\entropy_thresholds_imagenet_train_patch-16.json", 
-        fine_grain_ratio=0.5
+        json_path="D:\AwesomeCV\VQDC_testing\entropy_thresholds_imagenet_train_patch-16.json",
+        fine_grain_ratio=0.5,
     )

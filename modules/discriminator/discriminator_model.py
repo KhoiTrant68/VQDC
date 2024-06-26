@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torch.nn import functional as F
 
-from utils.modules import ActNorm
+from utils.nn_modules import ActNorm
 
 class NLayerDiscriminator(nn.Module):
     """Defines a PatchGAN discriminator as in Pix2Pix

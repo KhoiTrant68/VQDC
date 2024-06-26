@@ -13,7 +13,7 @@ from taming.diffusion_modules import (
     Normalize,
     ResnetBlock,
 )
-from dynamic_utils import instantiate_from_config
+from utils.utils_modules import instantiate_from_config
 
 
 class TripleGrainEncoder(nn.Module):

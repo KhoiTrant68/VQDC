@@ -1,4 +1,3 @@
-import importlib
 import numpy as np
 
 from PIL import Image
@@ -80,9 +79,7 @@ def _draw_grain_base(indices, low_color, high_color, scaler=0.1):
     score_map_np = rearrange(indices, "B C H W -> B H W C").cpu().numpy()
     score_map_np = np.clip(score_map_np, 0, 1)  # Clip values to 0-1 range
 
-    score_map_blend = (high * score_map_np + low * (1 - score_map_np)).astype(
-        np.uint8
-    )
+    score_map_blend = (high * score_map_np + low * (1 - score_map_np)).astype(np.uint8)
     score_map_blend = np.transpose(score_map_blend, (0, 3, 1, 2))
 
     return score_map_blend
@@ -188,29 +185,6 @@ def draw_triple_grain_256res_color(
         )
 
     return torch.stack(blended_images, dim=0)
-
-
-def instantiate_from_config(config):
-    """
-    Instantiates an object from a configuration dictionary.
-
-    Args:
-        config (dict): Configuration dictionary containing 'target' and 'params'.
-
-    Returns:
-        object: Instantiated object.
-    """
-    if "target" not in config:
-        raise KeyError("Expected key `target` to instantiate.")
-
-    def _get_obj_from_str(string, reload=False):
-        module, cls = string.rsplit(".", 1)
-        if reload:
-            module_imp = importlib.import_module(module)
-            importlib.reload(module_imp)
-        return getattr(importlib.import_module(module, package=None), cls)
-
-    return _get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 
 if __name__ == "__main__":
