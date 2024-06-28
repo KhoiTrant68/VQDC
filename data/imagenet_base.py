@@ -2,7 +2,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms 
 
-class ImagePaths(Dataset):
+class BaseDataset(Dataset):
     def __init__(self, split, paths, size=None, random_crop=False, labels=None):
         self.paths = paths
         self.size = size

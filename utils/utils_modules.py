@@ -1,40 +1,27 @@
 import importlib
 
 def instantiate_from_config(config):
-    """
-    Instantiates an object from a configuration dictionary.
+    """Instantiates an object from a configuration dictionary.
 
     Args:
-        config (dict): Configuration dictionary containing 'target' (required)
-                       and 'params' (optional) keys.
-            - 'target' (str): Fully qualified class name (e.g., 'module.class').
-            - 'params' (dict, optional): Dictionary of keyword arguments
-                                         for the class constructor.
+        config (dict): Configuration dictionary with 'target' and optional 'params' keys.
+            - target (str): Fully qualified class name (e.g., 'module.submodule.ClassName').
+            - params (dict, optional): Keyword arguments for the class constructor.
 
     Returns:
         object: Instantiated object.
 
     Raises:
-        KeyError: If 'target' key is missing in the config dictionary.
+        KeyError: If 'target' key is missing in the configuration.
     """
-    if "target" not in config:
-        raise KeyError("Expected key 'target' to instantiate.")
+    try:
+        target_class_name = config["target"]
+    except KeyError as e:
+        raise KeyError(f"Expected key 'target' to instantiate: {e}")
 
-    # Dynamically import the class from the specified module path
-    module_path, class_name = config["target"].rsplit(".", 1)
-    module = importlib.import_module(module_path)
-    class_ = getattr(module, class_name)
-
-    # Get parameters for class instantiation, defaulting to an empty dict
-    params = config.get("params", {})
-
-    # Instantiate the class with provided parameters
-    return class_(**params)
-
-
-def get_obj_from_str(string, reload=False):
-    """
-    This function is not used in the provided code and can be removed.
-    """
-    # This function is not used in the provided code, so it's safe to remove.
-    raise NotImplementedError("This function is not used and can be removed.") 
+    module_name, class_name = target_class_name.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    target_class = getattr(module, class_name)
+    
+    # Pass parameters if provided, otherwise use an empty dictionary
+    return target_class(**config.get("params", {}))
