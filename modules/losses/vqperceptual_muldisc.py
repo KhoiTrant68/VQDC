@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from lpips import LPIPS
-from discriminator.discriminator_model import weights_init
+from modules.discriminator.discriminator_model import weights_init
 
 from utils.utils_modules import instantiate_from_config
 

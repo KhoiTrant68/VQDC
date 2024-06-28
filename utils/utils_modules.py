@@ -1,5 +1,6 @@
 import importlib
 
+
 def instantiate_from_config(config):
     """Instantiates an object from a configuration dictionary.
 
@@ -22,6 +23,10 @@ def instantiate_from_config(config):
     module_name, class_name = target_class_name.rsplit(".", 1)
     module = importlib.import_module(module_name)
     target_class = getattr(module, class_name)
+
+
+    from pprint import pprint
+    pprint(config.get('params'))
     
     # Pass parameters if provided, otherwise use an empty dictionary
     return target_class(**config.get("params", {}))

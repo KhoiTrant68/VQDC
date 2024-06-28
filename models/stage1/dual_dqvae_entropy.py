@@ -45,6 +45,9 @@ class DualGrainVQModel(nn.Module):
         image_key: str = "image",
         entropy_patch_size: int = 16,
         image_size: int = 256,
+        monitor = None,
+        warmup_epochs = 0,
+        **ignore_kwargs,
     ):
         super().__init__()
 

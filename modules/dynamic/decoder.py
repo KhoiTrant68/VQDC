@@ -9,8 +9,8 @@ from torch.nn import functional as F
 import numpy as np
 from einops import rearrange
 
-from taming.diffusion_modules import ResnetBlock, AttnBlock, Upsample, Normalize
-from fourier_embedding import FourierPositionEmbedding
+from modules.taming.diffusion_modules import ResnetBlock, AttnBlock, Upsample, Normalize
+from modules.dynamic.fourier_embedding import FourierPositionEmbedding
 
 
 class PositionEmbedding2DLearned(nn.Module):

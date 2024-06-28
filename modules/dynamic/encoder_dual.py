@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from taming.diffusion_modules import (
+from modules.taming.diffusion_modules import (
     AttnBlock,
     Downsample,
     Normalize,
