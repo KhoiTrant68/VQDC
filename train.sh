@@ -1,0 +1,1 @@
+python train.py --base configs/dqvae_dual_feat_imagenet.yml --epochs 6

@@ -129,6 +129,7 @@ class ImageNetTrain(ImageNetBase):
             datadir = self.datadir
             if not os.path.exists(datadir):
                 path = os.path.join(self.root, self.FILES[0])
+                print('path--------------',path)
                 assert os.path.exists(path)
                 assert os.path.getsize(path) == self.SIZES[0]
 

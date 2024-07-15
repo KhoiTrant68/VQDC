@@ -15,6 +15,7 @@ def instantiate_from_config(config):
     Raises:
         KeyError: If 'target' key is missing in the configuration.
     """
+    print("config-------------", config)
     try:
         target_class_name = config["target"]
     except KeyError as e:

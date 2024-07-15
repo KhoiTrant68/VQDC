@@ -2,14 +2,13 @@ model:
   warmup_epochs: 5
   scheduler_type: linear-warmup_cosine-decay
   base_learning_rate: 4.5e-06
-  min_learning_rate: 1e-6
   target: models.stage1.dual_dqvae_feat.DualGrainVQModel
   params:
     encoderconfig:
       target: modules.dynamic.encoder_dual.DualGrainEncoder
       params:
         ch: 128
-        ch_mult: [1,1,2,2,4]
+        ch_mult: [1, 1, 2, 2, 4]
         num_res_blocks: 2
         attn_resolutions: [16, 32]
         dropout: 0.0
@@ -29,7 +28,7 @@ model:
         ch: 128
         in_ch: 256
         out_ch: 3
-        ch_mult: [1,1,2,2]
+        ch_mult: [1, 1, 2, 2]
         num_res_blocks: 2
         resolution: 256
         attn_resolutions: [32]
@@ -74,13 +73,12 @@ model:
         commitment_beta: 0.25
         decay: 0.99
         restart_unused_codes: True
-        
+
     quant_before_dim: 256
     quant_after_dim: 256
     quant_sample_temperature: 0.0
     image_key: image
     # monitor: val_rec_loss
-
 
 data:
   target: data.data_builder.DataModuleFromConfig
@@ -99,4 +97,3 @@ data:
         config:
           is_eval: True
           size: 256
-

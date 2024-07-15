@@ -1,7 +1,7 @@
 from easydict import EasyDict
 
 # Use a base path and format strings for clarity and potential efficiency
-base_data_path = "D:"
+base_data_path = "D:/archive"
 imagenet_path = f"{base_data_path}/imagenet-mini"
 
 DefaultDataPath = EasyDict()
