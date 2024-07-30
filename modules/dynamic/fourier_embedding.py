@@ -131,8 +131,8 @@ class FourierPositionEmbedding(nn.Module):
 
 
 # Example usage
-if __name__ == "__main__":
-    x = torch.randn(10, 64, 32, 32)
-    module = FourierPositionEmbedding(coord_size=32, hidden_size=64)
-    output = module(x)
-    print(output.shape)  # Output shape should be the same as input shape
+# if __name__ == "__main__":
+#     x = torch.randn(10, 64, 32, 32)
+#     module = FourierPositionEmbedding(coord_size=32, hidden_size=64)
+#     output = module(x)
+#     print(output.shape)  # Output shape should be the same as input shape

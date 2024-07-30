@@ -167,8 +167,16 @@ def main(args: argparse.Namespace):
     cli = OmegaConf.from_dotlist(unknown)
     config = OmegaConf.merge(*configs, cli)
 
+
+
+    # print(config.data)
     model = instantiate_from_config(config.model)
     dataset = instantiate_from_config(config.data)
+    
+    dataset = dataset.prepare_data()
+
+
+
     data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)

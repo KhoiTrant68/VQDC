@@ -15,7 +15,6 @@ def instantiate_from_config(config):
     Raises:
         KeyError: If 'target' key is missing in the configuration.
     """
-    print("config-------------", config)
     try:
         target_class_name = config["target"]
     except KeyError as e:
@@ -24,10 +23,6 @@ def instantiate_from_config(config):
     module_name, class_name = target_class_name.rsplit(".", 1)
     module = importlib.import_module(module_name)
     target_class = getattr(module, class_name)
-
-
-    from pprint import pprint
-    pprint(config.get('params'))
     
     # Pass parameters if provided, otherwise use an empty dictionary
     return target_class(**config.get("params", {}))
