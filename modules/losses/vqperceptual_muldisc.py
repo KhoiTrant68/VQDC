@@ -67,7 +67,6 @@ class VQLPIPSWithDiscriminator(nn.Module):
         self.disc_loss_fn, self.gen_loss_fn = self.loss_functions.get(disc_loss, (None, None))
         if self.disc_loss_fn is None:
             raise ValueError(f"Unknown GAN loss '{disc_loss}'.")
-        print(f"VQLPIPSWithDiscriminator running with {disc_loss} loss.")
         
         self.disc_factor = disc_factor
         self.discriminator_weight = disc_weight

@@ -1,19 +1,18 @@
 import warnings
-
-warnings.filterwarnings("ignore")
-
 import os
 import glob
 import argparse
 from typing import List
 
-from accelerate import Accelerator
-from omegaconf import OmegaConf
-from utils.utils_modules import instantiate_from_config
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+from accelerate import Accelerator
+from omegaconf import OmegaConf
+
+from utils.utils_modules import instantiate_from_config
 
 import pytz
 import datetime
@@ -55,10 +54,18 @@ def get_parser(**parser_kwargs):
         help="resume from logdir or checkpoint in logdir",
     )
     parser.add_argument(
-        "-s", "--seed", type=int, default=2021, help="seed for seed_everything"
+        "-s",
+        "--seed",
+        type=int,
+        default=2021,
+        help="seed for seed_everything",
     )
     parser.add_argument(
-        "-f", "--postfix", type=str, default="", help="post-postfix for default name"
+        "-f",
+        "--postfix",
+        type=str,
+        default="",
+        help="post-postfix for default name",
     )
     parser.add_argument(
         "-n",
@@ -74,9 +81,8 @@ def get_parser(**parser_kwargs):
         "--logtype",
         type=str,
         default="tensorboard",
-        nargs="?",
-        help="log type",
         choices=["wandb", "tensorboard"],
+        help="log type",
     )
     parser.add_argument(
         "-d",
@@ -120,80 +126,69 @@ def log_to_tensorboard(writer, log_stats, epoch):
 
 
 def main(args: argparse.Namespace):
+    # Initialize accelerator early for better device management
     accelerator = Accelerator()
+
     set_seed(args.seed)
 
-    if args.name and args.resume:
-        raise ValueError(
-            "-n/--name and -r/--resume cannot be specified both. Use -n/--name with --resume_from_checkpoint"
-        )
-
-    if args.resume:  # resume from checkpoint
+    # Simplify logdir and checkpoint handling
+    if args.resume:
         if not os.path.exists(args.resume):
             raise ValueError(f"Cannot find {args.resume}")
         if os.path.isfile(args.resume):
-            paths = args.resume.split("/")
-            idx = len(paths) - paths[::-1].index("logs") + 1
-            logdir = "/".join(paths[:idx])
+            logdir = os.path.dirname(args.resume)
             ckpt = args.resume
-        else:  # resume from logdir
-            assert os.path.isdir(args.resume), args.resume
+        else:
             logdir = args.resume.rstrip("/")
             ckpt = os.path.join(logdir, "checkpoints", "last.ckpt")
         args.resume_from_checkpoint = ckpt
-        base_configs = sorted(glob.glob(os.path.join(logdir, "configs/*.yaml")))
-        args.base = base_configs + args.base
-        _tmp = logdir.split("/")
-        nowname = _tmp[_tmp.index("logs") + 1]
+        args.base = sorted(glob.glob(os.path.join(logdir, "configs/*.yaml"))) + args.base
+        nowname = os.path.basename(logdir)
     else:
-        name = (
-            f"_{args.name}"
-            if args.name
-            else (
-                f"_{os.path.splitext(os.path.split(args.base[0])[-1])[0]}"
-                if args.base
-                else ""
-            )
+        basename = (
+            os.path.splitext(os.path.basename(args.base[0]))[0] if args.base else ""
         )
         nowname = (
-            get_current_time() + name + (f"_{args.postfix}" if args.postfix else "")
+            f"{get_current_time()}_{basename}{f'_{args.postfix}' if args.postfix else ''}"
         )
         logdir = os.path.join("logs", nowname)
 
     ckptdir = os.path.join(logdir, "checkpoints")
-    cfgdir = os.path.join(logdir, "configs")
 
+    # Configuration loading
     configs = [OmegaConf.load(cfg) for cfg in args.base]
     cli = OmegaConf.from_dotlist(unknown)
     config = OmegaConf.merge(*configs, cli)
 
-
-
-    # print(config.data)
+    # Model and Data Loading
     model = instantiate_from_config(config.model)
-    dataset = instantiate_from_config(config.data)
-    
-    dataset = dataset.prepare_data()
+    data_module = instantiate_from_config(config.data)
+    train_dataloader, val_dataloader = data_module.setup_dataloaders()  
 
-
-
-    data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    # Optimizer and Accelerator Preparation
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
+    model, optimizer, train_dataloader = accelerator.prepare(
+        model, optimizer, train_dataloader
+    )
+
+    # Training Loop
+    if accelerator.is_main_process and args.logtype == "tensorboard":
+        tb_writer = SummaryWriter(logdir)
 
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0.0
-        for batch in tqdm(data_loader):
+        for batch in tqdm(train_dataloader, disable=not accelerator.is_local_main_process):
             with accelerator.autocast():
                 outputs = model(**batch)
                 loss = outputs["loss"]
+
             accelerator.backward(loss)
             optimizer.step()
             optimizer.zero_grad()
             train_loss += loss.item() * len(batch)
 
-        train_loss /= len(data_loader.dataset)
+        train_loss /= len(train_dataloader.dataset)
         accelerator.print(
             f"Epoch {epoch+1}/{args.epochs}, Train Loss: {train_loss:.4f}"
         )
@@ -201,16 +196,15 @@ def main(args: argparse.Namespace):
         if accelerator.is_main_process:
             log_stats = {"train_loss": train_loss}
             if args.logtype == "tensorboard":
-                if not hasattr(main, "tb_writer"):
-                    main.tb_writer = SummaryWriter(logdir)
-                log_to_tensorboard(main.tb_writer, log_stats, epoch)
+                log_to_tensorboard(tb_writer, log_stats, epoch)
 
-    accelerator.wait_for_everyone()
+    # Save Model
     if accelerator.is_main_process:
         torch.save(model.state_dict(), os.path.join(ckptdir, "model.pt"))
 
 
 if __name__ == "__main__":
+    warnings.filterwarnings("ignore")
     parser = get_parser()
     args, unknown = parser.parse_known_args()
     print("Current Workspace:", os.getcwd())

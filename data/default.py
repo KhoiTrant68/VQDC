@@ -8,5 +8,5 @@ DefaultDataPath = EasyDict()
 DefaultDataPath.ImageNet = EasyDict(
     root=imagenet_path,
     train_write_root=f"{imagenet_path}/train",
-    val_write_root=f"{imagenet_path}/val"
+    val_write_root=f"{imagenet_path}/val",
 )

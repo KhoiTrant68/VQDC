@@ -47,7 +47,6 @@ class DataModuleFromConfig:
     
     def prepare_data(self):
         for data_cfg in self.dataset_configs.values():
-            print("instantiate from: ", data_cfg)
             instantiate_from_config(data_cfg)
 
     def get_dataloader(self, split):

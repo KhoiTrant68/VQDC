@@ -71,7 +71,6 @@ class TripleGrainVQModel(nn.Module):
                     print(f"Deleting key {k} from state_dict.")
                     del sd[k]
         self.load_state_dict(sd, strict=False)
-        print(f"Restored from {path}")
 
     def encode(
         self, x: torch.Tensor
