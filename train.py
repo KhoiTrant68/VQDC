@@ -1,27 +1,28 @@
-import warnings
+import datetime
 import os
-import glob
+import sys
+
+sys.path.append(os.getcwd())
+
+import warnings
+
+warnings.filterwarnings("ignore")
+
 import argparse
-from typing import List
+import glob
 
+# Torch and Accelerate
 import torch
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-
 from accelerate import Accelerator
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 
 from utils.utils_modules import instantiate_from_config
 
-import pytz
-import datetime
+# Wandb
+import wandb
 
-
-def get_current_time():
-    return datetime.datetime.now(pytz.timezone("Asia/Shanghai")).strftime(
-        "%m-%dT%H-%M-%S"
-    )
+now = datetime.datetime.now().strftime("%m-%dT%H-%M-%S")
 
 
 def get_parser(**parser_kwargs):
@@ -41,7 +42,7 @@ def get_parser(**parser_kwargs):
         "--base",
         nargs="*",
         metavar="base_config.yaml",
-        help="paths to base configs",
+        help="paths to base configs. Loaded from left-to-right. Parameters can be overwritten or added with command-line options of the form `--key value`.",
         default=[],
     )
     parser.add_argument(
@@ -77,12 +78,11 @@ def get_parser(**parser_kwargs):
         help="postfix for logdir",
     )
     parser.add_argument(
-        "-l",
-        "--logtype",
-        type=str,
-        default="tensorboard",
-        choices=["wandb", "tensorboard"],
-        help="log type",
+        "-e", 
+        "--max_epochs", 
+        type=int, 
+        default=100, 
+        help="Number of epochs to train for"
     )
     parser.add_argument(
         "-d",
@@ -105,108 +105,150 @@ def get_parser(**parser_kwargs):
         type=int,
         help="save top-n with monitor or save every n epochs without monitor",
     )
-    parser.add_argument(
-        "--epochs", type=int, default=10, help="Number of training epochs"
-    )
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument(
-        "--learning_rate", type=float, default=1e-3, help="Learning rate"
-    )
-    return parser
+    # Wandb arguments
+    parser.add_argument("--wandb_project", type=str, default="my_project", help="Name of the wandb project")
+    parser.add_argument("--wandb_entity", type=str, default="my_username", help="Your wandb username") 
 
+    return parser
 
 def set_seed(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
 
-def log_to_tensorboard(writer, log_stats, epoch):
-    for key, value in log_stats.items():
-        writer.add_scalar(key, value, epoch)
-
-
 def main(args: argparse.Namespace):
-    # Initialize accelerator early for better device management
+
+    # Initialize accelerator
     accelerator = Accelerator()
 
+    # Seed everything
     set_seed(args.seed)
 
-    # Simplify logdir and checkpoint handling
-    if args.resume:
+     # resume from checkpoint or logdir
+    if args.name and args.resume:
+        raise ValueError(
+            "-n/--name and -r/--resume cannot be specified both."
+            "If you want to resume training in a new log folder, "
+            "use -n/--name in combination with --resume_from_checkpoint"
+        )
+    if args.resume:  # resume from checkpoint
         if not os.path.exists(args.resume):
-            raise ValueError(f"Cannot find {args.resume}")
+            raise ValueError("Cannot find {}".format(args.resume))
         if os.path.isfile(args.resume):
-            logdir = os.path.dirname(args.resume)
+            paths = args.resume.split("/")
+            idx = len(paths)-paths[::-1].index("logs")+1
+            logdir = "/".join(paths[:idx])
             ckpt = args.resume
-        else:
+        else:  # resume from logdir
+            assert os.path.isdir(args.resume), args.resume
             logdir = args.resume.rstrip("/")
             ckpt = os.path.join(logdir, "checkpoints", "last.ckpt")
         args.resume_from_checkpoint = ckpt
-        args.base = sorted(glob.glob(os.path.join(logdir, "configs/*.yaml"))) + args.base
-        nowname = os.path.basename(logdir)
+        base_configs = sorted(glob.glob(os.path.join(logdir, "configs/*.yaml")))
+        args.base = base_configs+args.base
+        _tmp = logdir.split("/")
+        nowname = _tmp[_tmp.index("logs")+1]
     else:
-        basename = (
-            os.path.splitext(os.path.basename(args.base[0]))[0] if args.base else ""
-        )
-        nowname = (
-            f"{get_current_time()}_{basename}{f'_{args.postfix}' if args.postfix else ''}"
-        )
+        if args.name:
+            name = "_" + args.name
+        elif args.base:
+            cfg_fname = os.path.split(args.base[0])[-1]
+            cfg_name = os.path.splitext(cfg_fname)[0]
+            name = "_" + cfg_name
+        else:
+            name = ""
+        if args.postfix != "":
+            nowname = now + name + "_" + args.postfix
+        else:
+            nowname = now + name
         logdir = os.path.join("logs", nowname)
-
+    
     ckptdir = os.path.join(logdir, "checkpoints")
-
-    # Configuration loading
+    cfgdir = os.path.join(logdir, "configs")
+   
+    # Configuration loading 
     configs = [OmegaConf.load(cfg) for cfg in args.base]
     cli = OmegaConf.from_dotlist(unknown)
     config = OmegaConf.merge(*configs, cli)
 
-    # Model and Data Loading
+    # Model, Data, Optimizer Instantiation
     model = instantiate_from_config(config.model)
     data_module = instantiate_from_config(config.data)
-    train_dataloader, val_dataloader = data_module.setup_dataloaders()  
+    data_module.prepare_data()  # Prepare data if needed
 
-    # Optimizer and Accelerator Preparation
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    model, optimizer, train_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader
+    train_dataloader = data_module.train_dataloader()
+    val_dataloader = data_module.val_dataloader()
+
+    # Assuming you have an optimizer defined in your config
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.model.base_learning_rate)
+
+    # Prepare model, optimizer, and dataloader with Accelerator
+    model, optimizer, train_dataloader, val_dataloader = accelerator.prepare(
+        model, optimizer, train_dataloader, val_dataloader
     )
+   
+    # Configure learning rate scheduler if needed
+    # scheduler = ...  # Instantiate scheduler based on your config
+    # scheduler = accelerator.prepare(scheduler)  # Prepare the scheduler 
 
-    # Training Loop
-    if accelerator.is_main_process and args.logtype == "tensorboard":
-        tb_writer = SummaryWriter(logdir)
+    # Initialize Wandb 
+    if accelerator.is_main_process:
+        wandb.init(
+            project=args.wandb_project, 
+            entity=args.wandb_entity, 
+            name=nowname,  
+            config=config,   # Log your config
+            save_code=True   # Optional: Save your code to wandb
+        )
+        wandb.watch(model)   # Watch model gradients and parameters
 
-    for epoch in range(args.epochs):
+    # Training loop
+    for epoch in range(args.max_epochs):
         model.train()
         train_loss = 0.0
-        for batch in tqdm(train_dataloader, disable=not accelerator.is_local_main_process):
-            with accelerator.autocast():
+        for step, batch in enumerate(train_dataloader):
+            with accelerator.autocast():  # Enable mixed precision if available
+                # Forward pass, loss calculation, etc. 
                 outputs = model(**batch)
-                loss = outputs["loss"]
+                loss = outputs['loss']
 
+            # Backward pass and optimization 
             accelerator.backward(loss)
             optimizer.step()
+            # scheduler.step()  # Update lr scheduler 
             optimizer.zero_grad()
-            train_loss += loss.item() * len(batch)
 
-        train_loss /= len(train_dataloader.dataset)
-        accelerator.print(
-            f"Epoch {epoch+1}/{args.epochs}, Train Loss: {train_loss:.4f}"
-        )
+            train_loss += loss.item()
 
+        train_loss /= len(train_dataloader)
+       
+        # Validation Loop
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch in val_dataloader:
+                with accelerator.autocast():  
+                    outputs = model(**batch)
+                    loss = outputs["loss"]
+
+                val_loss += loss.item() 
+
+        val_loss /= len(val_dataloader)
+
+        # Logging to Wandb
         if accelerator.is_main_process:
-            log_stats = {"train_loss": train_loss}
-            if args.logtype == "tensorboard":
-                log_to_tensorboard(tb_writer, log_stats, epoch)
+            wandb.log({"Train Loss": train_loss, "Validation Loss": val_loss}, step=epoch)
 
-    # Save Model
-    if accelerator.is_main_process:
-        torch.save(model.state_dict(), os.path.join(ckptdir, "model.pt"))
+            # ... Log any other metrics, images, etc.  using `wandb.log(...)` ...
 
+    # ... (Save checkpoints, finalize Wandb run if needed) ...
+
+    wandb.finish()
 
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore")
     parser = get_parser()
     args, unknown = parser.parse_known_args()
-    print("Current Workspace:", os.getcwd())
-    print("Using Configs:", args.base)
+    print("Current Workspace: ", str(os.getcwd()))
+    print("Using Configs: {}".format(args.base))
+
     main(args)
