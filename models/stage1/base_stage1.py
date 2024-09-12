@@ -140,7 +140,9 @@ class Stage1Model(nn.Module, metaclass=abc.ABCMeta):
         except AttributeError:
             return self.decoder.last_layer
 
-    def log_images(self, batch: dict, **kwargs) -> Dict[str, torch.Tensor]:
+    def log_images(
+        self, device, mode: str, batch: dict, **kwargs
+    ) -> Dict[str, torch.Tensor]:
         """
         Logs input images, reconstructions, grain maps, and entropy maps.
 
@@ -153,20 +155,25 @@ class Stage1Model(nn.Module, metaclass=abc.ABCMeta):
         """
         log = dict()
         x = self.get_input(batch, self.image_key)
-        x = x.to(self.device)
-        xrec, _, grain_indices, gate, x_entropy = self(x)
+        x = x.to(device)
+        x_entropy = None
+        if mode == "feat":
+            xrec, _, grain_indices, gate = self(x)
+        else:
+            xrec, _, grain_indices, gate, x_entropy = self(x)
 
         log["inputs"] = x
         log["reconstructions"] = xrec
         log["grain_map"] = draw_dual_grain_256res_color(
             images=x.clone(), indices=grain_indices, scaler=0.7
         )
-        x_entropy = x_entropy.sub(x_entropy.min()).div(
-            max(x_entropy.max() - x_entropy.min(), 1e-5)
-        )
-        log["entropy_map"] = draw_dual_grain_256res_color(
-            images=x.clone(), indices=x_entropy, scaler=0.7
-        )
+        if x_entropy is not None:
+            x_entropy = x_entropy.sub(x_entropy.min()).div(
+                max(x_entropy.max() - x_entropy.min(), 1e-5)
+            )
+            log["entropy_map"] = draw_dual_grain_256res_color(
+                images=x.clone(), indices=x_entropy, scaler=0.7
+            )
         return log
 
     def get_code_emb_with_depth(

@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from typing import Dict
 
 import torch
@@ -12,19 +13,11 @@ from tqdm import tqdm
 import wandb
 from models.utils_models import (Scheduler_LinearWarmup,
                                  Scheduler_LinearWarmup_CosineDecay)
+from utils.logger import CaptionImageLogger, SetupCallback
 from utils.utils_modules import instantiate_from_config
 
 
 def get_parser(**parser_kwargs):
-    def str2bool(v):
-        if isinstance(v, bool):
-            return v
-        if v.lower() in ("yes", "true", "t", "y", "1"):
-            return True
-        if v.lower() in ("no", "false", "f", "n", "0"):
-            return False
-        raise argparse.ArgumentTypeError("Boolean value expected.")
-
     parser = argparse.ArgumentParser(**parser_kwargs)
     parser.add_argument(
         "-b",
@@ -73,14 +66,6 @@ def get_parser(**parser_kwargs):
         help="Specify the mixed precision mode during training. Options are 'no', 'fp16', 'bf16', and 'fp8'.",
     )
     parser.add_argument(
-        "-l",
-        "--logtype",
-        type=str,
-        default="wandb",
-        choices=["wandb", "tensorboard"],
-        help="Specify the type of logging to use during training. Choices are 'wandb' or 'tensorboard'.",
-    )
-    parser.add_argument(
         "--activate_ddp_share",
         action="store_true",
         help="Enable DDP sharded training strategy.",
@@ -109,6 +94,18 @@ def get_parser(**parser_kwargs):
         default="feat",
         help="Mode of model. feature or entropy.",
     )
+    parser.add_argument(
+        "--batch_frequency",
+        type=int,
+        default=50,
+        help="Log images every n batches.",
+    )
+    parser.add_argument(
+        "--max_images",
+        type=int,
+        default=16,
+        help="Maximum number of images to log.",
+    )
     return parser
 
 
@@ -116,7 +113,7 @@ def training_function(config: Dict, args: argparse.Namespace):
     accelerator = Accelerator(
         cpu=args.cpu,
         mixed_precision=args.mixed_precision,
-        log_with=args.logtype if args.with_tracking else None,
+        log_with="wandb" if args.with_tracking else None,
         project_dir=args.project_dir if args.with_tracking else None,
     )
 
@@ -207,6 +204,25 @@ def training_function(config: Dict, args: argparse.Namespace):
 
     best_val_loss = float("inf")
 
+    # Initialize callbacks
+    setup_callback = SetupCallback(
+        resume=args.resume_from_checkpoint,
+        now="",  # You might want to set a timestamp here if needed
+        logdir=accelerator.project_dir,
+        ckptdir=os.path.join(accelerator.project_dir, "checkpoints"),
+        cfgdir=os.path.join(accelerator.project_dir, "configs"),
+        config=config,
+        argv_content=sys.argv + ["gpus: {}".format(torch.cuda.device_count())],
+    )
+    image_logger = CaptionImageLogger(
+        batch_frequency=args.batch_frequency,
+        max_images=args.max_images,
+        type="wandb",
+    )
+
+    # Call setup callback at the beginning of training
+    setup_callback.on_training_start()
+
     for epoch in tqdm(range(starting_epoch, args.max_epochs), desc="Epoch"):
         model.train()
 
@@ -279,6 +295,19 @@ def training_function(config: Dict, args: argparse.Namespace):
                     },
                     step=overall_step,
                 )
+
+            if batch_idx % args.batch_frequency == 0:
+                image_logger.log_img(
+                    model,
+                    batch,
+                    batch_idx,
+                    split="train",
+                    mode=args.mode,
+                    epoch=epoch,
+                    step=overall_step,
+                    accelerator=accelerator,
+                )
+
             overall_step += 1
 
         model.eval()
@@ -337,6 +366,19 @@ def training_function(config: Dict, args: argparse.Namespace):
                         },
                         step=overall_step,
                     )
+
+                if batch_idx % args.batch_frequency == 0:
+                    image_logger.log_img(
+                        model,
+                        batch,
+                        batch_idx,
+                        split="val",
+                        mode=args.mode,
+                        epoch=epoch,
+                        step=overall_step,
+                        accelerator=accelerator,
+                    )
+
                 total_val_loss += aeloss.item() + discloss.item()
 
         if total_val_loss < best_val_loss:

@@ -77,7 +77,7 @@ model:
 
 scheduler:
   base_learning_rate: 4.5e-06
-  warmup_epochs: 5
+  warmup_epochs: 0
   warmup_epochs_ratio: 0.1
   scheduler_type: linear-warmup_cosine-decay
 
