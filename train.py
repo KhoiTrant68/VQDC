@@ -4,13 +4,13 @@ import sys
 from typing import Dict
 
 import torch
+import wandb
 from accelerate import Accelerator
 from omegaconf import OmegaConf
 from torch import optim
 from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 
-import wandb
 from models.utils_models import (Scheduler_LinearWarmup,
                                  Scheduler_LinearWarmup_CosineDecay)
 from utils.logger import CaptionImageLogger, SetupCallback

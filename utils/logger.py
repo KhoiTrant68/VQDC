@@ -3,10 +3,9 @@ import os
 import numpy as np
 import torch
 import torchvision
+import wandb
 from omegaconf import OmegaConf
 from PIL import Image
-
-import wandb
 
 
 class SetupCallback:
