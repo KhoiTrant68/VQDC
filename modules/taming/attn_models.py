@@ -585,7 +585,9 @@ if __name__ == "__main__":
     dummy_input = torch.randn(
         1, 256, 16, 16
     )  # Adjust size based on your input requirements
-    dummy_mask = torch.randint(0, 2, (10, 256))  # Adjust size based on your mask requirements
+    dummy_mask = torch.randint(
+        0, 2, (10, 256)
+    )  # Adjust size based on your mask requirements
 
     # Export the model
     torch.onnx.export(
