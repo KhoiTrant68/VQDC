@@ -38,11 +38,10 @@ class SetupCallback:
 
 
 class CaptionImageLogger:
-    def __init__(self, batch_frequency, max_images, clamp=True, type="wandb"):
+    def __init__(self, batch_frequency, max_images, clamp=True):
         self.batch_freq = batch_frequency
         self.max_images = max_images
         self.clamp = clamp
-        self.type = type
 
     def log_img(
         self,
@@ -112,12 +111,11 @@ class CaptionImageLogger:
 
     def log_to_wandb(self, images, split, step):
         # Log images to WandB
-        if self.type == "wandb":
-            grids = {}
-            for k in images:
-                grid = torchvision.utils.make_grid(images[k], normalize=True)
-                grids[f"{split}/{k}"] = wandb.Image(grid)
-            wandb.log(grids, step=step)
+        grids = {}
+        for k in images:
+            grid = torchvision.utils.make_grid(images[k], normalize=True)
+            grids[f"{split}/{k}"] = wandb.Image(grid)
+        wandb.log(grids, step=step)
 
     def log_local(self, save_dir, split, images, global_step, current_epoch, batch_idx):
         # Save images locally
