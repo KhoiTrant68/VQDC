@@ -1,5 +1,6 @@
 import json
 import unittest
+
 import numpy as np
 import torch
 from torch import nn
@@ -175,30 +176,37 @@ class TestDualGrainRouters(unittest.TestCase):
 
     def test_dual_grain_feature_router(self):
         router = DualGrainFeatureRouter(self.num_channels)
-        h_fine = torch.randn(self.batch_size, self.num_channels, self.height, self.width)
-        h_coarse = torch.randn(self.batch_size, self.num_channels, self.height // 2, self.width // 2)
-        
+        h_fine = torch.randn(
+            self.batch_size, self.num_channels, self.height, self.width
+        )
+        h_coarse = torch.randn(
+            self.batch_size, self.num_channels, self.height // 2, self.width // 2
+        )
+
         gate = router(h_fine, h_coarse)
-        
-        self.assertEqual(gate.shape, (self.batch_size, self.height // 2, self.width // 2, 2))
+
+        self.assertEqual(
+            gate.shape, (self.batch_size, self.height // 2, self.width // 2, 2)
+        )
 
     def test_dual_grain_fixed_entropy_router(self):
         router = DualGrainFixedEntropyRouter(self.json_path, fine_grain_ratio=0.5)
         entropy = torch.randn(self.batch_size, self.height, self.width)
-        
+
         gate = router(entropy=entropy)
-        
+
         self.assertEqual(gate.shape, (self.batch_size, self.height, self.width, 2))
         self.assertTrue(torch.all((gate.sum(dim=-1) == 1)))
 
     def test_dual_grain_dynamic_entropy_router(self):
         router = DualGrainDynamicEntropyRouter(self.json_path)
         entropy = torch.randn(self.batch_size, self.height, self.width)
-        
+
         gate = router(entropy=entropy)
-        
+
         self.assertEqual(gate.shape, (self.batch_size, self.height, self.width, 2))
         self.assertTrue(torch.all((gate.sum(dim=-1) == 1)))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,8 @@
+from typing import Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Tuple, Optional
+
 
 class AbstractEncoder(nn.Module):
     """An abstract base class for encoders."""
@@ -12,9 +14,10 @@ class AbstractEncoder(nn.Module):
         """Encodes the input data and returns the encoded data."""
         raise NotImplementedError
 
+
 class PositionAwareSOSProvider(AbstractEncoder):
     """
-    An encoder that provides start-of-sequence (SOS) tokens for unconditional training 
+    An encoder that provides start-of-sequence (SOS) tokens for unconditional training
     with dynamic granularity quantized transformer.
 
     Attributes:
@@ -67,27 +70,46 @@ class PositionAwareSOSProvider(AbstractEncoder):
         Returns:
             Tuple[torch.Tensor, ...]: A tuple of tensors containing SOS tokens.
 
-       
+
         """
         batch_size = x.size(0)
         device = x.device
 
-        c_coarse = torch.full((batch_size, 1), self.coarse_sos, device=device, dtype=torch.long)
-        c_fine = torch.full((batch_size, 1), self.fine_sos, device=device, dtype=torch.long) if self.fine_sos is not None else None
-        c_pos_coarse = torch.full((batch_size, 1), self.coarse_pos_sos, device=device, dtype=torch.long)
-        c_pos_fine = torch.full((batch_size, 1), self.fine_pos_sos, device=device, dtype=torch.long) if self.fine_pos_sos is not None else None
+        c_coarse = torch.full(
+            (batch_size, 1), self.coarse_sos, device=device, dtype=torch.long
+        )
+        c_fine = (
+            torch.full((batch_size, 1), self.fine_sos, device=device, dtype=torch.long)
+            if self.fine_sos is not None
+            else None
+        )
+        c_pos_coarse = torch.full(
+            (batch_size, 1), self.coarse_pos_sos, device=device, dtype=torch.long
+        )
+        c_pos_fine = (
+            torch.full(
+                (batch_size, 1), self.fine_pos_sos, device=device, dtype=torch.long
+            )
+            if self.fine_pos_sos is not None
+            else None
+        )
 
         if self.activate_seg:
-            c_seg_coarse = torch.full((batch_size, 1), self.coarse_seg_sos, device=device, dtype=torch.long)
-            c_seg_fine = torch.full((batch_size, 1), self.fine_seg_sos, device=device, dtype=torch.long)
+            c_seg_coarse = torch.full(
+                (batch_size, 1), self.coarse_seg_sos, device=device, dtype=torch.long
+            )
+            c_seg_fine = torch.full(
+                (batch_size, 1), self.fine_seg_sos, device=device, dtype=torch.long
+            )
             return c_coarse, c_fine, c_pos_coarse, c_pos_fine, c_seg_coarse, c_seg_fine
 
         return c_coarse, c_fine, c_pos_coarse, c_pos_fine, None, None
 
+
 class ClassForContentOnlyPositionAwareSOSProvider(AbstractEncoder):
     """
-    An encoder that provides start-of-sequence (SOS) tokens for class-conditional training 
-    with dynamic granularity quantized transformer. This encoder replaces the content SOS 
+    An encoder that provides start-of-sequence (SOS) tokens for class-conditional training
+    with dynamic granularity quantized transformer. This encoder replaces the content SOS
     tokens with class labels.
 
     Attributes:
@@ -147,15 +169,28 @@ class ClassForContentOnlyPositionAwareSOSProvider(AbstractEncoder):
         c_coarse = (x + self.threshold).unsqueeze(1)
         c_fine = c_coarse if self.fine_pos_sos is not None else None
 
-        c_pos_coarse = torch.full((batch_size, 1), self.coarse_pos_sos, device=device, dtype=torch.long)
-        c_pos_fine = torch.full((batch_size, 1), self.fine_pos_sos, device=device, dtype=torch.long) if self.fine_pos_sos is not None else None
+        c_pos_coarse = torch.full(
+            (batch_size, 1), self.coarse_pos_sos, device=device, dtype=torch.long
+        )
+        c_pos_fine = (
+            torch.full(
+                (batch_size, 1), self.fine_pos_sos, device=device, dtype=torch.long
+            )
+            if self.fine_pos_sos is not None
+            else None
+        )
 
         if self.activate_seg:
-            c_seg_coarse = torch.full((batch_size, 1), self.coarse_seg_sos, device=device, dtype=torch.long)
-            c_seg_fine = torch.full((batch_size, 1), self.fine_seg_sos, device=device, dtype=torch.long)
+            c_seg_coarse = torch.full(
+                (batch_size, 1), self.coarse_seg_sos, device=device, dtype=torch.long
+            )
+            c_seg_fine = torch.full(
+                (batch_size, 1), self.fine_seg_sos, device=device, dtype=torch.long
+            )
             return c_coarse, c_fine, c_pos_coarse, c_pos_fine, c_seg_coarse, c_seg_fine
 
         return c_coarse, c_fine, c_pos_coarse, c_pos_fine, None, None
+
 
 class ClassAwareSOSProvider(AbstractEncoder):
     """
@@ -218,7 +253,7 @@ class ClassAwareSOSProvider(AbstractEncoder):
             Tuple[torch.Tensor, ...]: A tuple of six tensors, each with shape (batch_size, 1),
             containing the encoded class labels and SOS tokens.
 
-        
+
         """
         batch_size = x.shape[0]
         device = x.device
@@ -239,6 +274,7 @@ class ClassAwareSOSProvider(AbstractEncoder):
             fine_seg_sos,
         )
 
+
 def main():
     """
     Test function to demonstrate the usage of different SOS providers.
@@ -248,37 +284,57 @@ def main():
     # Test PositionAwareSOSProvider
     print("Testing PositionAwareSOSProvider:")
     pos_aware_provider = PositionAwareSOSProvider(
-        coarse_sos=1, coarse_pos_sos=2, fine_sos=3, fine_pos_sos=4, coarse_seg_sos=5, fine_seg_sos=6
+        coarse_sos=1,
+        coarse_pos_sos=2,
+        fine_sos=3,
+        fine_pos_sos=4,
+        coarse_seg_sos=5,
+        fine_seg_sos=6,
     )
     input_tensor = torch.randn(2, 10)  # Batch size of 2, arbitrary input size
     output = pos_aware_provider.encode(input_tensor)
     print("Input shape:", input_tensor.shape)
     print("Output:", output)
-    print("Explanation: Should return 6 tensors with shape (2, 1), containing the specified SOS tokens.")
+    print(
+        "Explanation: Should return 6 tensors with shape (2, 1), containing the specified SOS tokens."
+    )
 
     # Test ClassForContentOnlyPositionAwareSOSProvider
     print("\nTesting ClassForContentOnlyPositionAwareSOSProvider:")
     class_content_provider = ClassForContentOnlyPositionAwareSOSProvider(
-        n_classes=10, threshold=100, coarse_pos_sos=2, fine_pos_sos=4, coarse_seg_sos=5, fine_seg_sos=6
+        n_classes=10,
+        threshold=100,
+        coarse_pos_sos=2,
+        fine_pos_sos=4,
+        coarse_seg_sos=5,
+        fine_seg_sos=6,
     )
     class_input = torch.tensor([3, 7])  # Two class labels
     output = class_content_provider.encode(class_input)
     print("Input:", class_input)
     print("Output:", output)
-    print("Explanation: Should return 6 tensors. The first two contain class labels + threshold (103 and 107),")
+    print(
+        "Explanation: Should return 6 tensors. The first two contain class labels + threshold (103 and 107),"
+    )
     print("             while others contain position and segment SOS tokens.")
 
     # Test ClassAwareSOSProvider
     print("\nTesting ClassAwareSOSProvider:")
     class_aware_provider = ClassAwareSOSProvider(
-        n_classes=10, threshold_content=100, threshold_coarse_position=200,
-        threshold_fine_position=300, coarse_seg_sos=5, fine_seg_sos=6
+        n_classes=10,
+        threshold_content=100,
+        threshold_coarse_position=200,
+        threshold_fine_position=300,
+        coarse_seg_sos=5,
+        fine_seg_sos=6,
     )
     class_input = torch.tensor([3, 7])  # Two class labels
     output = class_aware_provider.encode(class_input)
     print("Input:", class_input)
     print("Output:", output)
-    print("Explanation: Should return 6 tensors. The first four contain class labels + respective thresholds,")
+    print(
+        "Explanation: Should return 6 tensors. The first four contain class labels + respective thresholds,"
+    )
     print("             while the last two contain segment SOS tokens.")
 
 
