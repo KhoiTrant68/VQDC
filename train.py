@@ -217,7 +217,6 @@ def training_function(config: Dict, args: argparse.Namespace):
     image_logger = CaptionImageLogger(
         batch_frequency=args.batch_frequency,
         max_images=args.max_images,
-        type="wandb",
     )
 
     # Call setup callback at the beginning of training
