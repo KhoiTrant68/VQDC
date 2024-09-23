@@ -26,9 +26,7 @@ class BaseBudgetConstraint(nn.Module):
         Returns:
             torch.Tensor: Budget ratio for the target grain size.
         """
-        # weights = weights.to("cuda")
-        weights = weights.to("cpu")
-
+        weights = weights.to("cuda")
         beta = (gate * weights[:, None, None]).sum(dim=1).sum() / gate.size(
             0
         ) - base_area
