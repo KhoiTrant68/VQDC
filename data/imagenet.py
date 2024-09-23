@@ -31,7 +31,7 @@ class ImageNetBase(Dataset):
         with open(self.txt_file, "r") as f:
             self.relpaths = f.read().splitlines()
 
-        self.abspaths = [os.path.join(self.data_dir, p) for p in self.relpaths][:200]
+        self.abspaths = [os.path.join(self.data_dir, p) for p in self.relpaths]
         self.data = BaseDataset(
             split=self.split,
             paths=self.abspaths,

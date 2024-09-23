@@ -164,3 +164,4 @@ cython_debug/
 
 logging/
 wandb/
+output/

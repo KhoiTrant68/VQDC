@@ -108,10 +108,9 @@ def draw_dual_grain_256res_color(
     blended_images = []
     for i in range(images.size(0)):
         image_i_pil = transform_to_pil(image_normalize(images[i]))
-        # score_map_i_blend = Image.fromarray(score_map_blend[i])
-        score_map_i_blend = Image.fromarray(score_map_blend[i].astype(np.uint8))
+        score_map_i_blend = Image.fromarray(score_map_blend[i].transpose(1, 2, 0))  # Ensure correct shape
         image_i_blend = Image.blend(
-            image_i_pil.convert("RGB"), score_map_i_blend, scaler
+            image_i_pil.convert("RGB"), score_map_i_blend.convert("RGB"), scaler
         )
         blended_images.append(
             torchvision.transforms.functional.to_tensor(image_i_blend)
