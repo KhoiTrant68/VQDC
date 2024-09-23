@@ -1,3 +1,6 @@
+import json
+
+import numpy as np
 import torch
 from torch import nn
 
@@ -96,6 +99,8 @@ class TripleGrainFeatureRouter(nn.Module):
             0, 2, 3, 1
         )
         gate = self.gate(h_logistic)
+        gate = gate.float()  # Ensure gate tensor is of floating-point type
+        gate = torch.nn.functional.gumbel_softmax(gate, tau=1, dim=-1, hard=True)
         return gate
 
 
@@ -213,17 +218,35 @@ class TripleGrainDynamicEntropyRouter(TripleGrainEntropyRouter):
         Returns:
             torch.Tensor: Routing gate.
         """
+
+        # Ensure fine_grain_ratio leaves room for median_grain_ratio
+        fine_grain_ratio_max = min(
+            self.fine_grain_ratio_max, 100 - self.median_grain_ratio_min
+        )
         fine_grain_ratio = np.random.randint(
-            self.fine_grain_ratio_min, self.fine_grain_ratio_max
+            self.fine_grain_ratio_min, fine_grain_ratio_max
         )
+        median_grain_ratio_max = min(
+            self.median_grain_ratio_max, 100 - fine_grain_ratio
+        )
+
+        if self.median_grain_ratio_min >= median_grain_ratio_max:
+            # Adjust median_grain_ratio_max to ensure valid range
+            median_grain_ratio_max = self.median_grain_ratio_min + 1
+            print("Adjusted median_grain_ratio_max to ensure valid range")
+
         median_grain_ratio = np.random.randint(
-            self.median_grain_ratio_min,
-            min(self.median_grain_ratio_max, 100 - fine_grain_ratio),
+            self.median_grain_ratio_min, median_grain_ratio_max
         )
+
+        # Ensure the sum of fine_grain_ratio and median_grain_ratio does not exceed the maximum key
+        total_ratio = fine_grain_ratio + median_grain_ratio
+        if total_ratio >= 100:
+            total_ratio = 99
+            median_grain_ratio = total_ratio - fine_grain_ratio
+
         fine_grain_threshold = self.entropy_thresholds[str(fine_grain_ratio)]
-        median_grain_threshold = self.entropy_thresholds[
-            str(fine_grain_ratio + median_grain_ratio)
-        ]
+        median_grain_threshold = self.entropy_thresholds[str(total_ratio)]
         gate = self._get_gate_from_threshold(
             entropy, fine_grain_threshold, median_grain_threshold
         )

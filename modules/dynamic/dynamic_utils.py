@@ -108,7 +108,9 @@ def draw_dual_grain_256res_color(
     blended_images = []
     for i in range(images.size(0)):
         image_i_pil = transform_to_pil(image_normalize(images[i]))
-        score_map_i_blend = Image.fromarray(score_map_blend[i].transpose(1, 2, 0))  # Ensure correct shape
+        score_map_i_blend = Image.fromarray(
+            score_map_blend[i].transpose(1, 2, 0)
+        )  # Ensure correct shape
         image_i_blend = Image.blend(
             image_i_pil.convert("RGB"), score_map_i_blend.convert("RGB"), scaler
         )

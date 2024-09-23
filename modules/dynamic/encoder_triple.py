@@ -233,19 +233,19 @@ class TripleGrainEncoder(nn.Module):
             h_fine=h_fine, h_median=h_median, h_coarse=h_coarse, entropy=x_entropy
         )
         if self.training:
+            gate = gate.float()
             gate = F.gumbel_softmax(gate, tau=1, dim=-1, hard=True)
         gate = gate.permute(0, 3, 1, 2)
         indices = gate.argmax(dim=1)
 
         # Upsample the outputs to the finest resolution
-        h_coarse = h_coarse.repeat_interleave(4, dim=-1).repeat_interleave(4, dim=-2)
-        h_median = h_median.repeat_interleave(2, dim=-1).repeat_interleave(2, dim=-2)
+        h_coarse = F.interpolate(h_coarse, scale_factor=4, mode="nearest")
+        h_median = F.interpolate(h_median, scale_factor=2, mode="nearest")
 
-        indices_repeat = (
-            indices.repeat_interleave(4, dim=-1)
-            .repeat_interleave(4, dim=-2)
-            .unsqueeze(1)
-        )
+        # Resize indices_repeat to match the spatial resolution of h_coarse, h_median, and h_fine
+        indices_repeat = F.interpolate(
+            indices.unsqueeze(1).float(), size=(32, 32), mode="nearest"
+        ).long()
 
         # Combine the outputs based on the router's selection
         h_triple = torch.where(indices_repeat == 0, h_coarse, h_median)
@@ -255,9 +255,9 @@ class TripleGrainEncoder(nn.Module):
         # Apply gradient scaling during training based on the router's output
         if self.training:
             gate_grad = gate.max(dim=1, keepdim=True)[0]
-            gate_grad = gate_grad.repeat_interleave(4, dim=-1).repeat_interleave(
-                4, dim=-2
-            )
+            gate_grad = F.interpolate(
+                gate_grad, size=(32, 32), mode="nearest"
+            )  # Resize gate_grad
             h_triple = h_triple * gate_grad
 
         # Create a mask indicating the codebook scale for each region
