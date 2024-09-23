@@ -68,9 +68,9 @@ class ImageNetDataset(ImageNetBase):
         self.txt_file = os.path.join("/kaggle/working", "filelist.txt")
 
 
-        # with open(self.txt_file, "w") as f:
-        #     for p in glob(os.path.join(self.data_dir, "**", "*.JPEG")):
-        #         f.write(os.path.relpath(p, self.data_dir) + "\n")
+        with open(self.txt_file, "w") as f:
+            for p in glob(os.path.join(self.data_dir, "**", "*.JPEG")):
+                f.write(os.path.relpath(p, self.data_dir) + "\n")
 
 
 # Example usage (uncommented)
