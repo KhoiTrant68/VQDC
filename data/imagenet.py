@@ -66,9 +66,9 @@ class ImageNetDataset(ImageNetBase):
         self.data_dir = os.path.join(self.root, self.split)
         self.txt_file = os.path.join(self.write_root, "filelist.txt")
 
-        with open(self.txt_file, "w") as f:
-            for p in glob(os.path.join(self.data_dir, "**", "*.JPEG")):
-                f.write(os.path.relpath(p, self.data_dir) + "\n")
+        # with open(self.txt_file, "w") as f:
+        #     for p in glob(os.path.join(self.data_dir, "**", "*.JPEG")):
+        #         f.write(os.path.relpath(p, self.data_dir) + "\n")
 
 
 # Example usage (uncommented)
