@@ -61,14 +61,9 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default=None,
+        default="fp16",
         choices=["no", "fp16", "bf16", "fp8"],
         help="Specify the mixed precision mode during training. Options are 'no', 'fp16', 'bf16', and 'fp8'.",
-    )
-    parser.add_argument(
-        "--activate_ddp_share",
-        action="store_true",
-        help="Enable DDP sharded training strategy.",
     )
     parser.add_argument(
         "--max_epochs",
@@ -121,6 +116,9 @@ def training_function(config: Dict, args: argparse.Namespace):
         run = os.path.splitext(os.path.basename(__file__))[0]
         config_dict = OmegaConf.to_container(config, resolve=True)
         accelerator.init_trackers(run, config_dict)
+        print('\n args.project_dir ',  args.project_dir)
+        print('\n config ',  config)
+
         wandb.init(project=args.project_dir, config=config)
 
     data = instantiate_from_config(config.data)
