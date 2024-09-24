@@ -116,8 +116,8 @@ def training_function(config: Dict, args: argparse.Namespace):
         run = os.path.splitext(os.path.basename(__file__))[0]
         config_dict = OmegaConf.to_container(config, resolve=True)
         accelerator.init_trackers(run, config_dict)
-        print('\n args.project_dir ',  args.project_dir)
-        print('\n config ',  config)
+        print("\n args.project_dir ", args.project_dir)
+        print("\n config ", config)
 
         wandb.init(project=args.project_dir, config=config)
 
