@@ -61,9 +61,14 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default="fp16",
+        default=None,
         choices=["no", "fp16", "bf16", "fp8"],
         help="Specify the mixed precision mode during training. Options are 'no', 'fp16', 'bf16', and 'fp8'.",
+    )
+    parser.add_argument(
+        "--activate_ddp_share",
+        action="store_true",
+        help="Enable DDP sharded training strategy.",
     )
     parser.add_argument(
         "--max_epochs",
@@ -116,9 +121,6 @@ def training_function(config: Dict, args: argparse.Namespace):
         run = os.path.splitext(os.path.basename(__file__))[0]
         config_dict = OmegaConf.to_container(config, resolve=True)
         accelerator.init_trackers(run, config_dict)
-        print("\n args.project_dir ", args.project_dir)
-        print("\n config ", config)
-
         wandb.init(project=args.project_dir, config=config)
 
     data = instantiate_from_config(config.data)
@@ -229,15 +231,15 @@ def training_function(config: Dict, args: argparse.Namespace):
         for batch_idx, batch in enumerate(
             tqdm(train_dataloader, desc="Training", leave=False)
         ):
-            x = model.get_input(batch, model.image_key).to(accelerator.device)
+            x = model.module.get_input(batch, model.module.image_key).to(accelerator.device)
             if args.mode == "feat":
-                xrec, qloss, indices, gate = model(x)
+                xrec, qloss, indices, gate = model.module(x)
             else:
-                xrec, qloss, indices, gate, x_entropy = model(x)
+                xrec, qloss, indices, gate, x_entropy = model.module(x)
 
             ratio = indices.sum() / (indices.numel())
 
-            aeloss, log_dict_ae = model.calculate_loss(
+            aeloss, log_dict_ae = model.module.calculate_loss(
                 x, xrec, qloss, epoch, optimizer_idx=0, gate=gate
             )
             aeloss = aeloss.detach()
@@ -248,7 +250,7 @@ def training_function(config: Dict, args: argparse.Namespace):
                 optimizer_ae.zero_grad()
                 scheduler_ae.step()
 
-            discloss, log_dict_disc = model.calculate_loss(
+            discloss, log_dict_disc = model.module.calculate_loss(
                 x, xrec, qloss, epoch, optimizer_idx=1, gate=gate
             )
             accelerator.backward(discloss)
@@ -313,17 +315,17 @@ def training_function(config: Dict, args: argparse.Namespace):
             for batch_idx, batch in enumerate(
                 tqdm(val_dataloader, desc="Validation", leave=False)
             ):
-                x = model.get_input(batch, model.image_key).to(accelerator.device)
+                x = model.module.get_input(batch, model.module.image_key).to(accelerator.device)
                 if args.mode == "feat":
-                    xrec, qloss, indices, gate = model(x)
+                    xrec, qloss, indices, gate = model.module(x)
                 else:
-                    xrec, qloss, indices, gate, x_entropy = model(x)
+                    xrec, qloss, indices, gate, x_entropy = model.module(x)
                 ratio = indices.sum() / (indices.numel())
 
-                aeloss, log_dict_ae = model.calculate_loss(
+                aeloss, log_dict_ae = model.module.calculate_loss(
                     x, xrec, qloss, epoch, optimizer_idx=0, gate=gate
                 )
-                discloss, log_dict_disc = model.calculate_loss(
+                discloss, log_dict_disc = model.module.calculate_loss(
                     x, xrec, qloss, epoch, optimizer_idx=1, gate=gate
                 )
 
