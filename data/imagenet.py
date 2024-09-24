@@ -31,7 +31,7 @@ class ImageNetBase(Dataset):
         with open(self.txt_file, "r") as f:
             self.relpaths = f.read().splitlines()
 
-        self.abspaths = [os.path.join(self.data_dir, p) for p in self.relpaths]
+        self.abspaths = [os.path.join(self.data_dir, p) for p in self.relpaths][:200]
         self.data = BaseDataset(
             split=self.split,
             paths=self.abspaths,
@@ -64,8 +64,8 @@ class ImageNetDataset(ImageNetBase):
 
         self.write_root = getattr(DefaultDataPath.ImageNet, f"{self.split}_write_root")
         self.data_dir = os.path.join(self.root, self.split)
-        # self.txt_file = os.path.join(self.write_root, "filelist.txt")
-        self.txt_file = os.path.join("/kaggle/working", "filelist.txt")
+        self.txt_file = os.path.join(self.write_root, "filelist.txt")
+        # self.txt_file = os.path.join("/kaggle/working", "filelist.txt")
 
         with open(self.txt_file, "w") as f:
             for p in glob(os.path.join(self.data_dir, "**", "*.JPEG")):

@@ -1,7 +1,8 @@
 from easydict import EasyDict
 
 # Use a base path and format strings for clarity and potential efficiency
-base_data_path = "/kaggle/input/imagenetmini-1000"
+# base_data_path = "/kaggle/input/imagenetmini-1000"
+base_data_path = "/home/hanoi1/khoi"
 imagenet_path = f"{base_data_path}/imagenet-mini"
 
 DefaultDataPath = EasyDict()
