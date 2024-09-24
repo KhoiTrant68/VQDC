@@ -16,6 +16,9 @@ from models.utils_models import (Scheduler_LinearWarmup,
 from utils.logger import CaptionImageLogger, SetupCallback
 from utils.utils_modules import instantiate_from_config
 
+import copy
+import json
+
 
 def get_parser(**parser_kwargs):
     parser = argparse.ArgumentParser(**parser_kwargs)
@@ -119,7 +122,31 @@ def training_function(config: Dict, args: argparse.Namespace):
         print("\n args.project_dir ", args.project_dir)
         print("\n config ", config)
 
-        wandb.init(project=args.project_dir, config=config)
+        # Create a copy of the config and convert it to a JSON-serializable format
+        wandb_config = copy.deepcopy(config)
+        def make_serializable(obj):
+            if isinstance(obj, dict):
+                return {k: make_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [make_serializable(v) for v in obj]
+            elif isinstance(obj, (int, float, str, bool, type(None))):
+                return obj
+            elif hasattr(obj, '__dict__'):
+                return make_serializable(obj.__dict__)
+            else:
+                try:
+                    return json.dumps(obj)
+                except:
+                    return str(obj)
+
+        wandb_config = make_serializable(wandb_config)
+
+        # Initialize wandb with the serializable config
+        try:
+            wandb.init(project=args.project_dir, config=wandb_config)
+        except Exception as e:
+            print(f"Failed to initialize wandb: {e}")
+            args.with_tracking = False
 
     data = instantiate_from_config(config.data)
     train_dataloader = data.train_dataloader()
