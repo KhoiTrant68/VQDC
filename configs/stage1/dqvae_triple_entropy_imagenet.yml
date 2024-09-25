@@ -90,7 +90,7 @@ scheduler:
 data:
   target: data.data_builder.DataModuleFromConfig
   params:
-    batch_size: 2
+    batch_size: 1
     num_workers: 4
     train:
       target: data.imagenet.ImageNetDataset
