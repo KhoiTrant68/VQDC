@@ -16,9 +16,6 @@ from models.utils_models import (Scheduler_LinearWarmup,
 from utils.logger import CaptionImageLogger, SetupCallback
 from utils.utils_modules import instantiate_from_config
 
-import copy
-import json
-
 
 def get_parser(**parser_kwargs):
     parser = argparse.ArgumentParser(**parser_kwargs)
