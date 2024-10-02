@@ -11,27 +11,27 @@ from torch.nn import functional as F
 from modules.discriminator.discriminator_model import weights_init
 from utils.utils_modules import instantiate_from_config
 
-
 # Define loss functions outside the class for reusability
 def hinge_d_loss(logits_real, logits_fake):
-    return 0.5 * (F.relu(1.0 - logits_real).mean() + F.relu(1.0 + logits_fake).mean())
-
+    loss_real = torch.mean(F.relu(1. - logits_real))
+    loss_fake = torch.mean(F.relu(1. + logits_fake))
+    d_loss = 0.5 * (loss_real + loss_fake)
+    return d_loss
 
 def hinge_g_loss(logits_fake):
-    return -logits_fake.mean()
-
+    return -torch.mean(logits_fake)
 
 def vanilla_d_loss(logits_real, logits_fake):
-    return 0.5 * (F.softplus(-logits_real).mean() + F.softplus(logits_fake).mean())
-
+    d_loss = 0.5 * (
+        torch.mean(torch.nn.functional.softplus(-logits_real)) +
+        torch.mean(torch.nn.functional.softplus(logits_fake)))
+    return d_loss
 
 def bce_discr_loss(logits_real, logits_fake):
-    return (-F.logsigmoid(-logits_fake) - F.logsigmoid(logits_real)).mean()
-
+    return (-log(1 - torch.sigmoid(logits_fake)) - log(torch.sigmoid(logits_real))).mean()
 
 def bce_gen_loss(logits_fake):
-    return -F.logsigmoid(logits_fake).mean()
-
+    return -log(torch.sigmoid(logits_fake)).mean()
 
 class VQLPIPSWithDiscriminator(nn.Module):
     def __init__(
@@ -51,7 +51,7 @@ class VQLPIPSWithDiscriminator(nn.Module):
         budget_loss_config=None,
     ):
         super().__init__()
-
+        assert disc_loss in ["hinge", "vanilla", "bce"]
         self.codebook_weight = codebook_weight
         self.pixel_weight = pixelloss_weight
         self.perceptual_loss = LPIPS().eval() if perceptual_weight > 0 else None
@@ -62,7 +62,6 @@ class VQLPIPSWithDiscriminator(nn.Module):
         if disc_init:
             self.discriminator.apply(weights_init)
 
-        # Use a dictionary to store loss functions for easier access
         self.loss_functions = {
             "hinge": (hinge_d_loss, hinge_g_loss),
             "vanilla": (vanilla_d_loss, hinge_g_loss),
@@ -86,7 +85,6 @@ class VQLPIPSWithDiscriminator(nn.Module):
         )
 
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
-        # Simplify gradient calculation using a single backward pass
         if last_layer is not None:
             nll_grads = torch.autograd.grad(nll_loss, last_layer, retain_graph=True)[0]
             g_grads = torch.autograd.grad(g_loss, last_layer, retain_graph=True)[0]
@@ -116,7 +114,7 @@ class VQLPIPSWithDiscriminator(nn.Module):
         split="train",
         gate=None,
     ):
-        rec_loss = torch.abs(inputs - reconstructions)  # No need for contiguous
+        rec_loss = torch.abs(inputs - reconstructions)
         if self.perceptual_loss:
             p_loss = self.perceptual_loss(inputs, reconstructions)
             rec_loss = rec_loss + self.perceptual_weight * p_loss
@@ -125,8 +123,7 @@ class VQLPIPSWithDiscriminator(nn.Module):
 
         nll_loss = rec_loss.mean()
 
-        # GAN part
-        if optimizer_idx == 0:  # Generator update
+        if optimizer_idx == 0:
             if self.disc_conditional:
                 assert cond is not None, "Conditional discriminator requires 'cond'."
                 logits_fake = self.discriminator(
@@ -189,7 +186,7 @@ class VQLPIPSWithDiscriminator(nn.Module):
             }
             return loss, log
 
-        if optimizer_idx == 1:  # Discriminator update
+        if optimizer_idx == 1:
             if self.disc_conditional:
                 assert cond is not None, "Conditional discriminator requires 'cond'."
                 logits_real = self.discriminator(
